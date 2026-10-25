@@ -67,6 +67,7 @@ def slip_json(s):
         "defrost_start": s.defrost_start.isoformat() if s.defrost_start else None,
         "kill_date": s.kill_date.isoformat() if s.kill_date else None,
         "shelf_life": s.shelf_life_label,
+        "printed_at": timezone.localtime(s.printed_at).isoformat() if s.printed_at else None,
         "discarded_at": timezone.localtime(s.discarded_at).isoformat() if s.discarded_at else None,
         "discarded_by": s.discarded_by,
     }
@@ -186,6 +187,16 @@ def slip_restore(request):
     return JsonResponse({"restored": count})
 
 
+@api
+@require_POST
+def slip_printed(request):
+    """Mark slips printed (out of the print tray), or `printed: false` to put them back in."""
+    ids = request.json.get("ids") or []
+    printed = request.json.get("printed", True)
+    count = Slip.objects.filter(id__in=ids).update(printed_at=timezone.now() if printed else None)
+    return JsonResponse({"updated": count})
+
+
 PRODUCT_FIELDS = ("name", "note", "group", "basis", "duration_value", "duration_unit", "sort_order", "active")
 
 
@@ -229,3 +240,19 @@ def product_update(request, pk):
     staff_only(request)
     product = apply_product_fields(get_object_or_404(Product, pk=pk), request.json)
     return JsonResponse({"product": product_json(product)})
+
+
+@api
+@require_POST
+def product_delete(request, pk):
+    """Delete a product for good. Refused while slips on the board still use it."""
+    staff_only(request)
+    product = get_object_or_404(Product, pk=pk)
+    in_use = product.slips.filter(discarded_at__isnull=True).count()
+    if in_use:
+        raise BadRequest(
+            f"{product} is on {in_use} slip{'s' if in_use > 1 else ''} on the board. "
+            "Discard those slips first, or untick Active to hide the product instead."
+        )
+    product.delete()  # discarded slips in history just lose the link
+    return JsonResponse({"deleted": pk})

@@ -28,7 +28,25 @@ Open http://localhost:8000 (or the computer's IP from a tablet on the same Wi-Fi
 
 ## Printing
 
-Slips print 3 per page on **US Letter, landscape** with dashed cut lines. In the browser print dialog, set margins to "Default" and turn off "Headers and footers".
+**Print settings** (any user; saved per computer/tablet, so each printer can have its own):
+
+| Layout | Per page | Paper |
+|---|---|---|
+| Full form | 3 | US Letter, landscape; cut into 3 strips |
+| Compact | 8 | US Letter, portrait; cut into 8 |
+| Labels | 10 | 2" × 4" sticker sheets (Avery 5163 / 8163); set **Start at label #** to use a part-used sheet |
+
+**Print tray**
+- **Save to tray** keeps new slips in the tray, so you can print a full page at once with **Print tray → Print now**.
+- **Save & Print now** prints straight away.
+- After printing, the app asks if it printed OK. Answer OK to empty the tray, or Cancel to keep the slips for another try.
+- **Add to tray** queues existing slips for a reprint.
+
+**Replacing a slip**
+- **Replace & reprint** makes a fresh slip and prints it straight away.
+- **Replace & save** makes a fresh slip and puts it in the tray instead.
+
+In the browser print dialog, set margins to "Default" (or "None" for labels), scale to 100%, and turn off "Headers and footers".
 
 ## Products & shelf life (admin)
 

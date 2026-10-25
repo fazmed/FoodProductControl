@@ -22,9 +22,13 @@
 
     <section class="toolbar">
       <button class="btn primary big" id="btn-new">+ New Slip</button>
+      <button class="btn big" id="btn-tray">Print tray</button>
+      <button class="btn ghost" id="btn-print-settings">Print settings</button>
       <div class="sel-actions">
         <button class="btn" id="btn-select-expired">Select expired</button>
         <button class="btn" id="btn-print" disabled>Print</button>
+        <button class="btn" id="btn-to-tray" disabled>Add to tray</button>
+        <button class="btn" id="btn-replace-save" disabled title="Discard and make a fresh slip in the print tray">Replace &amp; save</button>
         <button class="btn" id="btn-replace" disabled>Replace &amp; reprint</button>
         <button class="btn danger" id="btn-discard" disabled>Discard</button>
         <button class="btn ghost" id="btn-clear" disabled>Clear</button>
@@ -62,8 +66,8 @@
       </div>
       <footer>
         <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
-        <button class="btn" id="btn-save" type="button">Save</button>
-        <button class="btn primary" id="btn-save-print" type="button">Save &amp; Print</button>
+        <button class="btn" id="btn-save" type="button">Save to tray</button>
+        <button class="btn primary" id="btn-save-print" type="button">Save &amp; Print now</button>
       </footer>
     </form>
   </dialog>
@@ -74,6 +78,40 @@
       <header><h2>Slip</h2><button class="x" value="cancel">&times;</button></header>
       <div class="dlg-body view-body"><div id="view-slip"></div></div>
       <footer id="view-actions"></footer>
+    </form>
+  </dialog>
+
+  <!-- Print tray -->
+  <dialog id="dlg-tray" class="dlg">
+    <form method="dialog">
+      <header><h2>Print tray</h2><button class="x" value="cancel">&times;</button></header>
+      <div class="dlg-body">
+        <p class="hint" id="tray-info"></p>
+        <ul class="tray-list" id="tray-list"></ul>
+      </div>
+      <footer>
+        <button class="btn ghost" value="cancel">Close</button>
+        <button class="btn primary" id="btn-tray-print" type="button">Print now</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- Print settings (saved on this device) -->
+  <dialog id="dlg-print-settings" class="dlg">
+    <form method="dialog" id="form-print-settings">
+      <header><h2>Print settings</h2><button class="x" value="cancel">&times;</button></header>
+      <div class="dlg-body">
+        <p class="hint">Saved on this computer/tablet only, so each printer can have its own setting.</p>
+        <div class="layouts" id="layout-options"></div>
+        <label class="start-at" id="row-label-start">Start at label #
+          <input id="label-start" type="number" min="1" max="10">
+          <span class="hint">Use the leftover labels on a part-used sheet. Labels are numbered left to right, top to bottom.</span>
+        </label>
+      </div>
+      <footer>
+        <button class="btn ghost" value="cancel">Cancel</button>
+        <button class="btn primary" id="btn-print-settings-save" type="button">Save</button>
+      </footer>
     </form>
   </dialog>
 
@@ -97,6 +135,7 @@
   </dialog>
 
   <div id="print-area"></div>
+  <style id="page-style"></style>
 
   {{ data|json_script:"initial-data" }}
   <script src="{% static 'slips/app.js' %}"></script>

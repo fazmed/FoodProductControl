@@ -13,7 +13,9 @@ const state = {
   group: "all",
   search: "",
   newSel: new Set(),
+  stackPos: new Map(), // stack key -> { i, t }: which slip of a stack is in front, and when it was moved
 };
+const STACK_RESET_MS = 20 * 1000; // after this, a stack goes back to "use first" in front
 
 /* ---------- helpers ---------- */
 const $ = (s) => document.querySelector(s);
@@ -41,7 +43,7 @@ function duration(ms) {
 const productById = (id) => state.products.find((p) => p.id === id);
 const productLabel = (p) => (p ? (p.note ? `${p.name} (${p.note})` : p.name) : "Unknown product");
 const slipProducts = (s) => s.product_ids.map(productById).filter(Boolean);
-const slipTitle = (s) => slipProducts(s).map(productLabel).join(", ");
+const slipTitle = (s) => slipProducts(s).map(productLabel).join(", ") || "Deleted product";
 const ruleKey = (p) => `${p.basis}|${p.duration_value}|${p.duration_unit}`;
 
 function status(s) {
@@ -155,15 +157,63 @@ function render() {
 
   const list = visibleSlips();
   $("#board").innerHTML = list.length
-    ? list.map(cardHtml).join("")
+    ? groupedBoardHtml(list)
     : `<p class="empty">${state.filter === "active" ? "No slips yet. Tap “+ New Slip” to add one." : "Nothing here."}</p>`;
 
   const n = state.selected.size;
   $("#btn-print").textContent = n ? `Print (${n})` : "Print";
-  ["#btn-print", "#btn-replace", "#btn-discard", "#btn-clear"].forEach((s) => ($(s).disabled = !n));
+  ["#btn-print", "#btn-to-tray", "#btn-replace-save", "#btn-replace", "#btn-discard", "#btn-clear"].forEach((s) => ($(s).disabled = !n));
+  renderTrayButton();
 }
 
-function cardHtml(s) {
+// One section per product group, in the slip form's order; empty groups are left out.
+// A slip goes under the group of its first product. Slips for the same product(s)
+// are stacked, soonest pull in front, so a second container is obvious at a glance.
+function groupedBoardHtml(list) {
+  const stackUp = state.filter !== "discarded";
+  return state.groups.map(({ key, label }) => {
+    const items = list.filter((s) => (slipProducts(s)[0]?.group ?? "prep") === key);
+    if (!items.length) return "";
+    const expired = items.filter((s) => status(s) === "expired").length;
+    const stacks = new Map(); // list is sorted by pull time, so each stack's first slip expires first
+    items.forEach((s) => {
+      const k = stackUp ? stackKey(s) : `slip-${s.id}`;
+      stacks.set(k, [...(stacks.get(k) || []), s]);
+    });
+    return `
+      <section class="group">
+        <h2>${esc(label)} <span class="count">${items.length}</span>${expired ? `<span class="count expired">${expired} expired</span>` : ""}</h2>
+        <div class="group-grid">${[...stacks].map(([k, slips]) => stackHtml(k, slips)).join("")}</div>
+      </section>`;
+  }).join("");
+}
+
+const stackKey = (s) => [...s.product_ids].sort((a, b) => a - b).join("-");
+
+function stackFront(k, n) {
+  const pos = state.stackPos.get(k);
+  return pos && pos.i < n && Date.now() - pos.t < STACK_RESET_MS ? pos.i : 0;
+}
+
+// Front card = the container on show; every other container peeks out below it as a
+// strip (number, status, pull time) that brings it to the front when tapped.
+function stackHtml(k, slips) {
+  const n = slips.length;
+  if (n === 1) return cardHtml(slips[0]);
+  const i = stackFront(k, n);
+  const peeks = slips.map((s, j) => ({ s, j })).filter(({ j }) => j !== i).map(({ s, j }, d) => {
+    const st = status(s);
+    return `<button type="button" class="peek st-${st} ${state.selected.has(s.id) ? "sel" : ""}" data-goto="${j}"
+        style="--d:${d + 1}; z-index:${50 - d}" title="Bring to front">
+      <span class="peek-num">${j + 1}</span>
+      <span class="peek-when" title="Pull ${fmtShort(new Date(s.pull_at))}">${pad(new Date(s.pull_at).getDate())} ${MONTHS[new Date(s.pull_at).getMonth()]} · ${fmtTime(new Date(s.pull_at))}</span>
+      <span class="peek-st">${st === "expired" ? "EXPIRED" : st === "soon" ? "SOON" : ""}${s.printed_at ? "" : " · In tray"}</span>
+    </button>`;
+  }).join("");
+  return `<div class="stack" data-key="${k}" data-n="${n}">${cardHtml(slips[i], { i, n })}<div class="peeks">${peeks}</div></div>`;
+}
+
+function cardHtml(s, stack = null) {
   const st = status(s);
   const pull = new Date(s.pull_at);
   const left = pull - Date.now();
@@ -178,9 +228,18 @@ function cardHtml(s) {
     <article class="card st-${st} ${sel ? "sel" : ""}" data-id="${s.id}" tabindex="0">
       <label class="pick" title="Select"><input type="checkbox" ${sel ? "checked" : ""}></label>
       <div class="card-status">${label}</div>
+      ${stack ? `<div class="stack-tag">${stack.i === 0 ? "<b>USE FIRST</b>" : ""}<span>${stack.i + 1} of ${stack.n}</span></div>` : ""}
       <h3>${esc(slipTitle(s))}</h3>
       <div class="pull"><span>Pull</span> ${fmtShort(pull)}</div>
       <div class="meta">In ${fmtShort(new Date(s.time_in))} · ${esc(s.initials)} · ${esc(s.shelf_life)}</div>
+      <div class="card-foot">
+        ${st === "discarded" ? "" : s.printed_at
+          ? `<button type="button" class="tray-btn" data-tray="add">+ Add to tray</button>`
+          : `<button type="button" class="tray-btn in" data-tray="remove" title="Tap to take it out of the tray">&#10003; In tray</button>`}
+        ${stack ? `<span class="stack-nav">
+          <button type="button" data-step="-1" aria-label="Previous container">&#8249;</button>
+          <button type="button" data-step="1" aria-label="Next container">&#8250;</button></span>` : ""}
+      </div>
     </article>`;
 }
 
@@ -193,6 +252,10 @@ const ampm = (d) => {
   return `<span class="${pm ? "" : "circ"}">AM</span>/<span class="${pm ? "circ" : ""}">PM</span>`;
 };
 
+// The defrost / kill date line goes under the last section that has products using it.
+const lastGroupWith = (basis) =>
+  state.groups.map((g) => g.key).filter((k) => state.products.some((p) => p.active && p.group === k && p.basis === basis)).pop();
+
 function slipHtml(s) {
   const on = new Set(s.product_ids);
   const tin = new Date(s.time_in);
@@ -204,12 +267,12 @@ function slipHtml(s) {
     if (!items.length) return "";
     const rows = items.map((p) => `
       <div class="it ${on.has(p.id) ? "on" : ""}">
-        <span class="box">${on.has(p.id) ? "&#10004;" : ""}</span>
+        <span class="box"></span>
         <span class="nm">${esc(p.name)}<small>${esc(p.note ? p.note + " · " : "")}${esc(on.has(p.id) ? s.shelf_life : p.shelf_life)}</small></span>
       </div>`).join("");
     let extra = "";
-    if (key === "frozen") extra = `<div class="p-line">Defrosting Start Date: <b>${fmtDay(s.defrost_start)}</b></div>`;
-    if (key === "seasoned") extra = `<div class="p-line">Kill Date: <b>${fmtDay(s.kill_date)}</b></div>`;
+    if (key === lastGroupWith("defrost")) extra += `<div class="p-line">Defrosting Start Date: <b>${fmtDay(s.defrost_start)}</b></div>`;
+    if (key === lastGroupWith("kill")) extra += `<div class="p-line">Kill Date: <b>${fmtDay(s.kill_date)}</b></div>`;
     return `<div class="p-sec"><h4>${esc(label)}:</h4><div class="p-grid">${rows}</div>${extra}</div>`;
   }).join("");
 
@@ -231,7 +294,30 @@ function slipHtml(s) {
     </div>`;
 }
 
-// Shrink the slip's text until everything fits on the paper strip.
+// Compact slip: everything needed to act on, without the unticked boxes.
+function compactHtml(s) {
+  const tin = new Date(s.time_in);
+  const pull = new Date(s.pull_at);
+  const fmtDay = (iso) => (iso ? fmtDate(new Date(iso + "T00:00")) : "");
+  const extra = s.defrost_start
+    ? `<div class="c-row">Defrost start <b>${fmtDay(s.defrost_start)}</b></div>`
+    : s.kill_date ? `<div class="c-row">Kill date <b>${fmtDay(s.kill_date)}</b></div>` : "";
+  return `
+    <div class="cslip">
+      <div class="c-top"><span>PRODUCT CONTROL SLIP</span><span>#${s.id}</span></div>
+      <div class="c-item">${esc(slipTitle(s))}</div>
+      <div class="c-row">In <b>${fmtDate(tin)} · ${fmtTime(tin)}</b> &nbsp;Initials <b>${esc(s.initials)}</b></div>
+      ${extra}
+      <div class="c-pull">
+        <span class="c-label">PULL</span>
+        <span class="c-when">${fmtDate(pull)} · ${fmtTime(pull)}</span>
+        ${weekRow(pull)}
+      </div>
+      <div class="c-foot">${esc(s.shelf_life)}</div>
+    </div>`;
+}
+
+// Shrink a slip's text until everything fits in its space.
 function fitPaper(el) {
   let scale = 1;
   el.style.setProperty("--fs", scale);
@@ -241,16 +327,115 @@ function fitPaper(el) {
   }
 }
 
-function printSlips(slips) {
+/* ---------- print settings & printing ---------- */
+const LAYOUTS = {
+  full3: {
+    name: "Full form · 3 per page",
+    desc: "The whole paper form, Letter landscape. Cut into 3 strips.",
+    perPage: 3, html: slipHtml, page: "size: letter landscape; margin: .25in;",
+  },
+  compact8: {
+    name: "Compact · 8 per page",
+    desc: "Just the product, dates and pull time, bigger text. Letter portrait, cut into 8.",
+    perPage: 8, html: compactHtml, page: "size: letter portrait; margin: .25in;",
+  },
+  labels10: {
+    name: "Labels · 10 per sheet",
+    desc: "Compact slip on 2\" × 4\" sticker labels (Avery 5163 / 8163). Peel and stick, no cutting.",
+    perPage: 10, html: compactHtml, page: "size: letter portrait; margin: 0;", labels: true,
+  },
+};
+
+function loadPrintSettings() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem("printSettings") || "{}"); } catch { /* ignore */ }
+  return {
+    layout: LAYOUTS[saved.layout] ? saved.layout : "full3",
+    labelStart: Math.min(10, Math.max(1, Number(saved.labelStart) || 1)),
+  };
+}
+let printSettings = loadPrintSettings();
+function savePrintSettings() {
+  try { localStorage.setItem("printSettings", JSON.stringify(printSettings)); } catch { /* ignore */ }
+}
+
+// Spots left on the first page: part-used label sheets start further in.
+const firstPageSkip = () => (LAYOUTS[printSettings.layout].labels ? printSettings.labelStart - 1 : 0);
+
+async function printSlips(slips) {
   if (!slips.length) return;
-  const area = $("#print-area");
+  const key = printSettings.layout;
+  const layout = LAYOUTS[key];
+  const cells = [...Array(firstPageSkip()).fill(null), ...slips];
   const pages = [];
-  for (let i = 0; i < slips.length; i += 3) {
-    pages.push(`<div class="print-page">${slips.slice(i, i + 3).map(slipHtml).join("")}</div>`);
+  for (let i = 0; i < cells.length; i += layout.perPage) {
+    const items = cells.slice(i, i + layout.perPage).map((s) => (s ? `<div class="cell">${layout.html(s)}</div>` : `<div class="cell blank"></div>`));
+    pages.push(`<div class="print-page">${items.join("")}</div>`);
   }
+  const area = $("#print-area");
+  area.className = `layout-${key}`;
   area.innerHTML = pages.join("");
-  area.querySelectorAll(".paper").forEach(fitPaper);
+  $("#page-style").textContent = `@media print { @page { ${layout.page} } }`;
+  area.querySelectorAll(".paper, .cslip").forEach(fitPaper);
   window.print();
+
+  // We can't tell if the printer actually printed, so ask before emptying the tray.
+  const unprinted = slips.filter((s) => !s.printed_at);
+  if (!unprinted.length && !layout.labels) return;
+  if (!confirm(`Did the ${slips.length > 1 ? slips.length + " slips" : "slip"} print OK?\n\nOK = take them out of the print tray.\nCancel = keep them in the tray to print again.`)) return;
+  if (layout.labels) {
+    printSettings.labelStart = ((printSettings.labelStart - 1 + slips.length) % 10) + 1;
+    savePrintSettings();
+  }
+  if (unprinted.length) {
+    await post("/api/slips/printed/", { ids: unprinted.map((s) => s.id), printed: true });
+    await refreshSlips();
+  }
+}
+
+const trayItems = () => state.slips.filter((s) => !s.printed_at && !s.discarded_at).sort((a, b) => a.id - b.id);
+
+function trayFill(n) {
+  const layout = LAYOUTS[printSettings.layout];
+  const room = layout.perPage - firstPageSkip();
+  if (n <= room) return `${n} of ${room} spots on the ${layout.labels ? "sheet" : "page"}`;
+  const pages = 1 + Math.ceil((n - room) / layout.perPage);
+  return `${n} slips → ${pages} ${layout.labels ? "sheets" : "pages"}`;
+}
+
+function renderTrayButton() {
+  const n = trayItems().length;
+  $("#btn-tray").textContent = n ? `Print tray (${n})` : "Print tray";
+  $("#btn-tray").title = n ? trayFill(n) : "Saved slips wait here until you print";
+  $("#btn-tray").classList.toggle("has-items", n > 0);
+}
+
+function openTray() {
+  const items = trayItems();
+  $("#tray-info").textContent = items.length
+    ? `${trayFill(items.length)} · ${LAYOUTS[printSettings.layout].name}`
+    : "The tray is empty. Slips saved with “Save to tray” wait here until you print.";
+  $("#tray-list").innerHTML = items.map((s) => `
+    <li><div><b>${esc(slipTitle(s))}</b><span>Pull ${fmtShort(new Date(s.pull_at))} · ${esc(s.initials)}</span></div>
+    <button type="button" class="btn small ghost" data-untray="${s.id}" title="Take out of the tray without printing">Remove</button></li>`).join("");
+  $("#btn-tray-print").disabled = !items.length;
+  if (!$("#dlg-tray").open) $("#dlg-tray").showModal();
+}
+
+function openPrintSettings() {
+  $("#layout-options").innerHTML = Object.entries(LAYOUTS).map(([k, l]) => `
+    <label class="layout-opt">
+      <input type="radio" name="layout" value="${k}" ${k === printSettings.layout ? "checked" : ""}>
+      <span class="mini mini-${k}">${"<i></i>".repeat(l.perPage)}</span>
+      <span><b>${esc(l.name)}</b><small>${esc(l.desc)}</small></span>
+    </label>`).join("");
+  $("#label-start").value = printSettings.labelStart;
+  updateLabelRow();
+  $("#dlg-print-settings").showModal();
+}
+function updateLabelRow() {
+  const chosen = document.querySelector("input[name=layout]:checked")?.value;
+  $("#row-label-start").hidden = !LAYOUTS[chosen]?.labels;
 }
 
 /* ---------- actions ---------- */
@@ -267,7 +452,7 @@ async function discard(slips) {
   return true;
 }
 
-async function replace(slips) {
+async function replace(slips, { print = true } = {}) {
   const live = slips.filter((s) => !s.discarded_at);
   if (!live.length) return;
   const timeBased = live.every((s) => slipProducts(s).every((p) => p.basis === "time_in"));
@@ -287,11 +472,16 @@ async function replace(slips) {
   await post("/api/slips/discard/", { ids: live.map((s) => s.id), initials: who });
   state.selected.clear();
   await refreshSlips();
-  printSlips(created);
+  if (print) await printSlips(created); // otherwise the new slips wait in the print tray
 }
 
 async function restore(slip) {
   await post("/api/slips/restore/", { ids: [slip.id] });
+  await refreshSlips();
+}
+
+async function setInTray(ids, inTray) {
+  await post("/api/slips/printed/", { ids, printed: !inTray });
   await refreshSlips();
 }
 
@@ -300,27 +490,32 @@ function openView(id) {
   const s = state.slips.find((x) => x.id === id);
   if (!s) return;
   const holder = $("#view-slip");
-  holder.innerHTML = slipHtml(s);
+  holder.innerHTML = LAYOUTS[printSettings.layout].html(s);
+  holder.className = `layout-${printSettings.layout}`;
   const st = status(s);
   $("#view-actions").innerHTML = `
     <button class="btn ghost" value="cancel">Close</button>
     ${st === "discarded"
       ? `<button class="btn" type="button" data-act="restore">Put back on board</button>`
       : `<button class="btn danger" type="button" data-act="discard">Discard</button>
+         <button class="btn" type="button" data-act="tray">${s.printed_at ? "+ Add to tray" : "&#10003; In tray (remove)"}</button>
+         <button class="btn" type="button" data-act="replace-save">Replace &amp; save</button>
          <button class="btn" type="button" data-act="replace">Replace &amp; reprint</button>`}
     <button class="btn primary" type="button" data-act="print">Print</button>`;
   $("#view-actions").onclick = async (e) => {
     const act = e.target.dataset.act;
     if (!act) return;
     try {
-      if (act === "print") printSlips([s]);
+      if (act === "print") await printSlips([s]);
       if (act === "discard" && (await discard([s]))) $("#dlg-view").close();
       if (act === "replace") { $("#dlg-view").close(); await replace([s]); }
+      if (act === "replace-save") { $("#dlg-view").close(); await replace([s], { print: false }); }
+      if (act === "tray") { await setInTray([s.id], !!s.printed_at); $("#dlg-view").close(); }
       if (act === "restore") { await restore(s); $("#dlg-view").close(); }
     } catch (err) { alert(err.message); }
   };
   $("#dlg-view").showModal();
-  fitPaper(holder.querySelector(".paper"));
+  fitPaper(holder.firstElementChild);
 }
 
 /* ---------- new slip ---------- */
@@ -341,6 +536,11 @@ function openNew(preselect = []) {
   if (!$("#new-initials").value) $("#new-initials").focus();
 }
 
+// Slips still on the board that include this product, soonest pull first.
+const onBoard = (pid) =>
+  state.slips.filter((s) => !s.discarded_at && s.product_ids.includes(pid)).sort((a, b) => new Date(a.pull_at) - new Date(b.pull_at));
+const ordinal = (n) => n + (["th", "st", "nd", "rd"][(n % 100 - 20) % 10] || ["th", "st", "nd", "rd"][n % 100] || "th");
+
 function renderPicker() {
   const q = $("#picker-search").value.trim().toLowerCase();
   $("#picker").innerHTML = state.groups.map(({ key, label }) => {
@@ -351,6 +551,7 @@ function renderPicker() {
     return `<h4>${esc(label)}</h4><div class="pgrid">${items.map((p) => `
       <button type="button" class="pbtn ${state.newSel.has(p.id) ? "on" : ""}" data-pid="${p.id}">
         <b>${esc(p.name)}</b><small>${esc(p.note ? p.note + " · " : "")}${esc(p.shelf_life)}</small>
+        ${onBoard(p.id).length ? `<span class="onboard">${onBoard(p.id).length} on board</span>` : ""}
       </button>`).join("")}</div>`;
   }).join("") || `<p class="empty">No product matches.</p>`;
 }
@@ -379,7 +580,15 @@ function updateNew() {
       <span>${pull ? "Pull " + fmtShort(pull) : b[0].basis === "kill" ? "Enter kill date" : "Enter defrost date"}</span></li>`;
   }).join("");
   const total = batches.length * qty;
-  $("#new-preview").innerHTML = `<ul>${rows}</ul><p class="hint">${total} slip${total > 1 ? "s" : ""} will be created.</p>`;
+  const warnings = chosen.map((p) => {
+    const existing = onBoard(p.id);
+    if (!existing.length) return "";
+    const first = ordinal(existing.length + 1), last = ordinal(existing.length + qty);
+    return `<p class="warn"><b>Heads-up:</b> ${existing.length} ${esc(productLabel(p))} already on the board
+      (pull ${fmtShort(new Date(existing[0].pull_at))}${existing.length > 1 ? ", …" : ""}).
+      This will be the ${qty > 1 ? `${first}–${last}` : first}.</p>`;
+  }).join("");
+  $("#new-preview").innerHTML = `${warnings}<ul>${rows}</ul><p class="hint">${total} slip${total > 1 ? "s" : ""} will be created.</p>`;
 }
 
 async function saveNew(andPrint) {
@@ -402,7 +611,7 @@ async function saveNew(andPrint) {
     });
     $("#dlg-new").close();
     await refreshSlips();
-    if (andPrint) printSlips(res.slips);
+    if (andPrint) await printSlips(res.slips);
   } catch (e) {
     err.textContent = e.message;
   }
@@ -422,12 +631,28 @@ function productRow(p) {
     <td class="dur"><input data-f="duration_value" type="number" min="1" value="${p.duration_value}"><select data-f="duration_unit">${opt(UNITS, p.duration_unit)}</select></td>
     <td><input data-f="sort_order" type="number" min="0" value="${p.sort_order}" class="num"></td>
     <td><input data-f="active" type="checkbox" ${p.active ? "checked" : ""}></td>
-    <td><button type="button" class="btn small" data-save>Save</button></td>
+    <td class="row-actions"><button type="button" class="btn small" data-save>Save</button>
+      <button type="button" class="btn small danger" data-delete title="Delete this product">Delete</button></td>
   </tr>`;
 }
 
 function renderProducts() {
   $("#products-body").innerHTML = state.products.map(productRow).join("");
+}
+
+async function deleteProductRow(tr) {
+  const id = Number(tr.dataset.id);
+  if (!id) return tr.remove(); // a new row that was never saved
+  const p = productById(id);
+  if (!confirm(`Delete “${productLabel(p)}” for good?\n\nIt will disappear from New Slip and the printed form. This can't be undone.\n(To hide it for now instead, untick Active.)`)) return;
+  try {
+    await post(`/api/products/${id}/delete/`, {});
+    state.products = state.products.filter((x) => x.id !== id);
+    tr.remove();
+    render();
+  } catch (e) {
+    alert(e.message); // the list is long, so a message at the bottom could be missed
+  }
 }
 
 async function saveProductRow(tr) {
@@ -473,10 +698,24 @@ $("#group-filter").addEventListener("change", (e) => { state.group = e.target.va
 $("#search").addEventListener("input", (e) => { state.search = e.target.value; render(); });
 
 $("#board").addEventListener("click", (e) => {
+  const step = e.target.closest("[data-step], [data-goto]");
+  if (step) {
+    const stack = step.closest(".stack");
+    const k = stack.dataset.key, n = Number(stack.dataset.n);
+    const i = step.dataset.goto !== undefined
+      ? Number(step.dataset.goto)
+      : (stackFront(k, n) + Number(step.dataset.step) + n) % n;
+    state.stackPos.set(k, { i, t: Date.now() });
+    render();
+    return;
+  }
   const card = e.target.closest(".card");
   if (!card) return;
   const id = Number(card.dataset.id);
-  if (e.target.closest(".pick")) {
+  const trayBtn = e.target.closest("[data-tray]");
+  if (trayBtn) {
+    setInTray([id], trayBtn.dataset.tray === "add").catch((err) => alert(err.message));
+  } else if (e.target.closest(".pick")) {
     if (e.target.tagName !== "INPUT") return; // label click re-fires on the input
     state.selected.has(id) ? state.selected.delete(id) : state.selected.add(id);
     render();
@@ -496,9 +735,42 @@ $("#btn-select-expired").onclick = () => {
   render();
 };
 $("#btn-clear").onclick = () => { state.selected.clear(); render(); };
-$("#btn-print").onclick = () => printSlips(selectedSlips());
+$("#btn-print").onclick = () => printSlips(selectedSlips()).catch((e) => alert(e.message));
+$("#btn-to-tray").onclick = async () => {
+  const live = selectedSlips().filter((s) => !s.discarded_at);
+  if (!live.length) return;
+  try {
+    await setInTray(live.map((s) => s.id), true);
+    state.selected.clear();
+    render();
+  } catch (e) { alert(e.message); }
+};
+$("#btn-tray").onclick = openTray;
+$("#btn-tray-print").onclick = async () => {
+  $("#dlg-tray").close();
+  try { await printSlips(trayItems()); } catch (e) { alert(e.message); }
+};
+$("#tray-list").addEventListener("click", async (e) => {
+  const id = Number(e.target.dataset.untray);
+  if (!id) return;
+  try {
+    await post("/api/slips/printed/", { ids: [id], printed: true });
+    await refreshSlips();
+    openTray();
+  } catch (err) { alert(err.message); }
+});
+$("#btn-print-settings").onclick = openPrintSettings;
+$("#layout-options").addEventListener("change", updateLabelRow);
+$("#btn-print-settings-save").onclick = () => {
+  printSettings.layout = document.querySelector("input[name=layout]:checked").value;
+  printSettings.labelStart = Math.min(10, Math.max(1, Number($("#label-start").value) || 1));
+  savePrintSettings();
+  $("#dlg-print-settings").close();
+  render();
+};
 $("#btn-discard").onclick = () => discard(selectedSlips()).catch((e) => alert(e.message));
 $("#btn-replace").onclick = () => replace(selectedSlips()).catch((e) => alert(e.message));
+$("#btn-replace-save").onclick = () => replace(selectedSlips(), { print: false }).catch((e) => alert(e.message));
 
 $("#picker").addEventListener("click", (e) => {
   const b = e.target.closest("[data-pid]");
@@ -518,6 +790,7 @@ $("#btn-save-print").onclick = () => saveNew(true);
 $("#btn-products").onclick = () => { renderProducts(); $("#dlg-products").showModal(); };
 $("#products-body").addEventListener("click", (e) => {
   if (e.target.matches("[data-save]")) saveProductRow(e.target.closest("tr"));
+  if (e.target.matches("[data-delete]")) deleteProductRow(e.target.closest("tr"));
 });
 $("#btn-add-product").onclick = () => {
   $("#products-body").insertAdjacentHTML("beforeend", productRow({

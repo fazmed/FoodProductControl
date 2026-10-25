@@ -8,6 +8,8 @@ urlpatterns = [
     path("api/slips/create/", views.slip_create, name="slip_create"),
     path("api/slips/discard/", views.slip_discard, name="slip_discard"),
     path("api/slips/restore/", views.slip_restore, name="slip_restore"),
+    path("api/slips/printed/", views.slip_printed, name="slip_printed"),
     path("api/products/create/", views.product_create, name="product_create"),
     path("api/products/<int:pk>/", views.product_update, name="product_update"),
+    path("api/products/<int:pk>/delete/", views.product_delete, name="product_delete"),
 ]

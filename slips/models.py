@@ -12,7 +12,10 @@ class Product(models.Model):
         PREP = "prep", "Prep Items"
         SAUCE = "sauce", "Sauces & Spreads"
         CHEESE = "cheese", "Cheese"
-        FROZEN = "frozen", "Frozen"
+        FROZEN_BONELESS = "frozen_boneless", "Frozen Boneless"
+        FROZEN_BONEIN = "frozen_bonein", "Frozen Bone-in"
+        FRESH_BONELESS = "fresh_boneless", "Fresh Boneless"
+        FRESH_BONEIN = "fresh_bonein", "Fresh Bone-in"
         SEASONED = "seasoned", "Seasoned Chicken"
         MISC = "misc", "Misc. Items"
 
@@ -30,7 +33,7 @@ class Product(models.Model):
     note = models.CharField(
         max_length=80, blank=True, help_text='Shown under the name, e.g. "Walk-in Cooler".'
     )
-    group = models.CharField(max_length=10, choices=Group.choices, default=Group.PREP)
+    group = models.CharField(max_length=20, choices=Group.choices, default=Group.PREP)
     basis = models.CharField(max_length=10, choices=Basis.choices, default=Basis.TIME_IN)
     duration_value = models.PositiveIntegerField(default=1)
     duration_unit = models.CharField(max_length=5, choices=Unit.choices, default=Unit.DAYS)
@@ -72,8 +75,12 @@ class Product(models.Model):
         time of day as the time in (e.g. kill 06/10, in 2:45 PM, 4 days
         -> pull 10/10 2:45 PM), which is how the paper slips are filled.
         """
+        if self.duration_unit == self.Unit.HOURS and self.basis == self.Basis.TIME_IN:
+            return time_in + self.duration  # hours are real elapsed time
         if self.basis == self.Basis.TIME_IN:
-            start = time_in
+            # Days/weeks count on the store's calendar: same clock time on the
+            # pull day, even across a daylight-saving change.
+            start = timezone.localtime(time_in)
         else:
             day = defrost_start if self.basis == self.Basis.DEFROST else kill_date
             if day is None:
@@ -97,6 +104,8 @@ class Slip(models.Model):
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    # Empty until the slip is printed; unprinted slips make up the print tray.
+    printed_at = models.DateTimeField(null=True, blank=True)
     discarded_at = models.DateTimeField(null=True, blank=True)
     discarded_by = models.CharField(max_length=10, blank=True)
 
