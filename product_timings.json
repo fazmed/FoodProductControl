@@ -1,0 +1,422 @@
+[
+  {
+    "name": "Mac & Cheese",
+    "note": "Line",
+    "group": "prep",
+    "basis": "time_in",
+    "duration_value": 24,
+    "duration_unit": "hours",
+    "sort_order": 0,
+    "active": true
+  },
+  {
+    "name": "Mac & Cheese",
+    "note": "Walk-in Cooler",
+    "group": "prep",
+    "basis": "time_in",
+    "duration_value": 3,
+    "duration_unit": "days",
+    "sort_order": 1,
+    "active": true
+  },
+  {
+    "name": "Coleslaw",
+    "note": "",
+    "group": "prep",
+    "basis": "time_in",
+    "duration_value": 48,
+    "duration_unit": "hours",
+    "sort_order": 2,
+    "active": true
+  },
+  {
+    "name": "Biscuit",
+    "note": "Outside",
+    "group": "prep",
+    "basis": "time_in",
+    "duration_value": 1,
+    "duration_unit": "days",
+    "sort_order": 3,
+    "active": true
+  },
+  {
+    "name": "Biscuit",
+    "note": "Walk-in Cooler",
+    "group": "prep",
+    "basis": "time_in",
+    "duration_value": 6,
+    "duration_unit": "days",
+    "sort_order": 4,
+    "active": true
+  },
+  {
+    "name": "LBD",
+    "note": "Discard at close",
+    "group": "prep",
+    "basis": "time_in",
+    "duration_value": 12,
+    "duration_unit": "hours",
+    "sort_order": 5,
+    "active": true
+  },
+  {
+    "name": "Biscuit Dressing",
+    "note": "",
+    "group": "prep",
+    "basis": "time_in",
+    "duration_value": 1,
+    "duration_unit": "days",
+    "sort_order": 6,
+    "active": true
+  },
+  {
+    "name": "Buttermilk Batter",
+    "note": "",
+    "group": "prep",
+    "basis": "time_in",
+    "duration_value": 3,
+    "duration_unit": "days",
+    "sort_order": 7,
+    "active": true
+  },
+  {
+    "name": "Poultry Batter",
+    "note": "",
+    "group": "prep",
+    "basis": "time_in",
+    "duration_value": 3,
+    "duration_unit": "days",
+    "sort_order": 8,
+    "active": true
+  },
+  {
+    "name": "Lemonade",
+    "note": "",
+    "group": "prep",
+    "basis": "time_in",
+    "duration_value": 3,
+    "duration_unit": "days",
+    "sort_order": 9,
+    "active": true
+  },
+  {
+    "name": "Strawberry Syrup",
+    "note": "",
+    "group": "prep",
+    "basis": "time_in",
+    "duration_value": 12,
+    "duration_unit": "hours",
+    "sort_order": 10,
+    "active": true
+  },
+  {
+    "name": "Pulled Chicken",
+    "note": "Cooler",
+    "group": "prep",
+    "basis": "time_in",
+    "duration_value": 24,
+    "duration_unit": "hours",
+    "sort_order": 11,
+    "active": true
+  },
+  {
+    "name": "Pulled Chicken",
+    "note": "Freezer",
+    "group": "prep",
+    "basis": "time_in",
+    "duration_value": 4,
+    "duration_unit": "weeks",
+    "sort_order": 12,
+    "active": true
+  },
+  {
+    "name": "Chopped Chicken",
+    "note": "",
+    "group": "prep",
+    "basis": "time_in",
+    "duration_value": 36,
+    "duration_unit": "hours",
+    "sort_order": 13,
+    "active": true
+  },
+  {
+    "name": "Lettuce",
+    "note": "",
+    "group": "prep",
+    "basis": "time_in",
+    "duration_value": 1,
+    "duration_unit": "days",
+    "sort_order": 14,
+    "active": true
+  },
+  {
+    "name": "Pickles",
+    "note": "",
+    "group": "prep",
+    "basis": "time_in",
+    "duration_value": 4,
+    "duration_unit": "days",
+    "sort_order": 15,
+    "active": true
+  },
+  {
+    "name": "Garlic Parm",
+    "note": "",
+    "group": "sauce",
+    "basis": "time_in",
+    "duration_value": 3,
+    "duration_unit": "days",
+    "sort_order": 16,
+    "active": true
+  },
+  {
+    "name": "HBBQ",
+    "note": "",
+    "group": "sauce",
+    "basis": "time_in",
+    "duration_value": 3,
+    "duration_unit": "days",
+    "sort_order": 17,
+    "active": true
+  },
+  {
+    "name": "H Garlic",
+    "note": "",
+    "group": "sauce",
+    "basis": "time_in",
+    "duration_value": 3,
+    "duration_unit": "days",
+    "sort_order": 18,
+    "active": true
+  },
+  {
+    "name": "S'Hot",
+    "note": "",
+    "group": "sauce",
+    "basis": "time_in",
+    "duration_value": 3,
+    "duration_unit": "days",
+    "sort_order": 19,
+    "active": true
+  },
+  {
+    "name": "Ghost Pepper Spread",
+    "note": "",
+    "group": "sauce",
+    "basis": "time_in",
+    "duration_value": 14,
+    "duration_unit": "days",
+    "sort_order": 20,
+    "active": true
+  },
+  {
+    "name": "Mild Mayo",
+    "note": "",
+    "group": "sauce",
+    "basis": "time_in",
+    "duration_value": 30,
+    "duration_unit": "days",
+    "sort_order": 21,
+    "active": true
+  },
+  {
+    "name": "Spicy Mayo",
+    "note": "",
+    "group": "sauce",
+    "basis": "time_in",
+    "duration_value": 7,
+    "duration_unit": "days",
+    "sort_order": 22,
+    "active": true
+  },
+  {
+    "name": "Cheddar Cheese",
+    "note": "",
+    "group": "cheese",
+    "basis": "time_in",
+    "duration_value": 7,
+    "duration_unit": "days",
+    "sort_order": 23,
+    "active": true
+  },
+  {
+    "name": "Havarti Cheese",
+    "note": "",
+    "group": "cheese",
+    "basis": "time_in",
+    "duration_value": 5,
+    "duration_unit": "days",
+    "sort_order": 24,
+    "active": true
+  },
+  {
+    "name": "Cheese Curds",
+    "note": "",
+    "group": "cheese",
+    "basis": "time_in",
+    "duration_value": 7,
+    "duration_unit": "days",
+    "sort_order": 25,
+    "active": true
+  },
+  {
+    "name": "Buns",
+    "note": "",
+    "group": "misc",
+    "basis": "time_in",
+    "duration_value": 4,
+    "duration_unit": "days",
+    "sort_order": 26,
+    "active": true
+  },
+  {
+    "name": "Mini Buns",
+    "note": "",
+    "group": "misc",
+    "basis": "time_in",
+    "duration_value": 5,
+    "duration_unit": "days",
+    "sort_order": 27,
+    "active": true
+  },
+  {
+    "name": "Tortilla Bread",
+    "note": "",
+    "group": "misc",
+    "basis": "time_in",
+    "duration_value": 2,
+    "duration_unit": "days",
+    "sort_order": 28,
+    "active": true
+  },
+  {
+    "name": "Cinnamon Sugar",
+    "note": "",
+    "group": "misc",
+    "basis": "time_in",
+    "duration_value": 3,
+    "duration_unit": "days",
+    "sort_order": 29,
+    "active": true
+  },
+  {
+    "name": "Fillet",
+    "note": "",
+    "group": "frozen",
+    "basis": "defrost",
+    "duration_value": 7,
+    "duration_unit": "days",
+    "sort_order": 30,
+    "active": true
+  },
+  {
+    "name": "Nuggets/LTO",
+    "note": "",
+    "group": "frozen",
+    "basis": "defrost",
+    "duration_value": 7,
+    "duration_unit": "days",
+    "sort_order": 31,
+    "active": true
+  },
+  {
+    "name": "Boneless Wings",
+    "note": "",
+    "group": "frozen",
+    "basis": "defrost",
+    "duration_value": 7,
+    "duration_unit": "days",
+    "sort_order": 32,
+    "active": true
+  },
+  {
+    "name": "Spicy Tenders",
+    "note": "",
+    "group": "frozen",
+    "basis": "defrost",
+    "duration_value": 7,
+    "duration_unit": "days",
+    "sort_order": 33,
+    "active": true
+  },
+  {
+    "name": "Mild Tenders",
+    "note": "",
+    "group": "frozen",
+    "basis": "defrost",
+    "duration_value": 7,
+    "duration_unit": "days",
+    "sort_order": 34,
+    "active": true
+  },
+  {
+    "name": "Bone-in Wings",
+    "note": "",
+    "group": "frozen",
+    "basis": "defrost",
+    "duration_value": 7,
+    "duration_unit": "days",
+    "sort_order": 35,
+    "active": true
+  },
+  {
+    "name": "Spicy Dark",
+    "note": "",
+    "group": "seasoned",
+    "basis": "kill",
+    "duration_value": 4,
+    "duration_unit": "days",
+    "sort_order": 36,
+    "active": true
+  },
+  {
+    "name": "Spicy White",
+    "note": "",
+    "group": "seasoned",
+    "basis": "kill",
+    "duration_value": 4,
+    "duration_unit": "days",
+    "sort_order": 37,
+    "active": true
+  },
+  {
+    "name": "Spicy Wings",
+    "note": "",
+    "group": "seasoned",
+    "basis": "kill",
+    "duration_value": 3,
+    "duration_unit": "days",
+    "sort_order": 38,
+    "active": true
+  },
+  {
+    "name": "Mild Dark",
+    "note": "",
+    "group": "seasoned",
+    "basis": "kill",
+    "duration_value": 4,
+    "duration_unit": "days",
+    "sort_order": 39,
+    "active": true
+  },
+  {
+    "name": "Mild White",
+    "note": "",
+    "group": "seasoned",
+    "basis": "kill",
+    "duration_value": 4,
+    "duration_unit": "days",
+    "sort_order": 40,
+    "active": true
+  },
+  {
+    "name": "Mild Wings",
+    "note": "",
+    "group": "seasoned",
+    "basis": "kill",
+    "duration_value": 3,
+    "duration_unit": "days",
+    "sort_order": 41,
+    "active": true
+  }
+]

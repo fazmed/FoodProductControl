@@ -1,0 +1,104 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Product Control Slips</title>
+  <link rel="stylesheet" href="{% static 'slips/app.css' %}">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand"><small>PRODUCT</small>CONTROL SLIPS</div>
+      <div class="clock" id="clock"></div>
+      <div class="user">
+        <span id="username"></span>
+        <button class="btn ghost" id="btn-products" hidden>Products</button>
+        <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="btn ghost">Sign out</button></form>
+      </div>
+    </header>
+
+    <section class="summary" id="summary"></section>
+
+    <section class="toolbar">
+      <button class="btn primary big" id="btn-new">+ New Slip</button>
+      <div class="sel-actions">
+        <button class="btn" id="btn-select-expired">Select expired</button>
+        <button class="btn" id="btn-print" disabled>Print</button>
+        <button class="btn" id="btn-replace" disabled>Replace &amp; reprint</button>
+        <button class="btn danger" id="btn-discard" disabled>Discard</button>
+        <button class="btn ghost" id="btn-clear" disabled>Clear</button>
+      </div>
+    </section>
+
+    <section class="filters">
+      <div class="chips" id="status-filter"></div>
+      <select id="group-filter"><option value="all">All groups</option></select>
+      <input type="search" id="search" placeholder="Search product or initials…">
+    </section>
+
+    <main id="board" class="board"></main>
+  </div>
+
+  <!-- New slip -->
+  <dialog id="dlg-new" class="dlg wide">
+    <form method="dialog" id="form-new">
+      <header><h2 id="new-title">New Slip</h2><button class="x" value="cancel" formnovalidate>&times;</button></header>
+      <div class="dlg-body new-grid">
+        <div class="picker">
+          <input type="search" id="picker-search" placeholder="Find product…">
+          <div id="picker"></div>
+        </div>
+        <div class="new-side">
+          <label>Initials <input id="new-initials" maxlength="10" required autocomplete="off"></label>
+          <label>Time in <input id="new-time-in" type="datetime-local" required></label>
+          <label id="row-defrost" hidden>Defrosting start date <input id="new-defrost" type="date"></label>
+          <label id="row-kill" hidden>Kill date <input id="new-kill" type="date"></label>
+          <label>How many slips (pans) <input id="new-qty" type="number" min="1" max="20" value="1"></label>
+          <label class="check" id="row-combine" hidden><input type="checkbox" id="new-combine" checked> Put these on one slip</label>
+          <div id="new-preview" class="new-preview"></div>
+          <p class="error" id="new-error"></p>
+        </div>
+      </div>
+      <footer>
+        <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn" id="btn-save" type="button">Save</button>
+        <button class="btn primary" id="btn-save-print" type="button">Save &amp; Print</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- Single slip preview -->
+  <dialog id="dlg-view" class="dlg">
+    <form method="dialog">
+      <header><h2>Slip</h2><button class="x" value="cancel">&times;</button></header>
+      <div class="dlg-body view-body"><div id="view-slip"></div></div>
+      <footer id="view-actions"></footer>
+    </form>
+  </dialog>
+
+  <!-- Products (admin) -->
+  <dialog id="dlg-products" class="dlg wide">
+    <form method="dialog">
+      <header><h2>Products &amp; shelf life</h2><button class="x" value="cancel">&times;</button></header>
+      <div class="dlg-body">
+        <p class="hint">Changes apply to new slips only. Slips already on the board keep the pull time they were printed with.</p>
+        <div class="table-wrap"><table class="products">
+          <thead><tr><th>Name</th><th>Note</th><th>Group</th><th>Counted from</th><th>Shelf life</th><th>Order</th><th>Active</th><th></th></tr></thead>
+          <tbody id="products-body"></tbody>
+        </table></div>
+        <p class="error" id="products-error"></p>
+      </div>
+      <footer>
+        <button class="btn" id="btn-add-product" type="button">+ Add product</button>
+        <button class="btn primary" value="cancel">Done</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <div id="print-area"></div>
+
+  {{ data|json_script:"initial-data" }}
+  <script src="{% static 'slips/app.js' %}"></script>
+</body>
+</html>
