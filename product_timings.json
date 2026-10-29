@@ -114,7 +114,7 @@
     "note": "Cooler",
     "group": "prep",
     "basis": "time_in",
-    "duration_value": 24,
+    "duration_value": 36,
     "duration_unit": "hours",
     "sort_order": 11,
     "active": true
@@ -137,7 +137,7 @@
     "duration_value": 36,
     "duration_unit": "hours",
     "sort_order": 13,
-    "active": true
+    "active": false
   },
   {
     "name": "Lettuce",

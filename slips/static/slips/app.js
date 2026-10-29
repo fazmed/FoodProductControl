@@ -12,6 +12,7 @@ const state = {
   filter: "active",
   group: "all",
   search: "",
+  withinHours: null, // "Pull within" filter: only slips due within this many hours (overdue ones included)
   newSel: new Set(),
   stackPos: new Map(), // stack key -> { i, t }: which slip of a stack is in front, and when it was moved
 };
@@ -74,7 +75,9 @@ async function refreshSlips() {
   try {
     const res = await fetch("/api/slips/");
     if (res.status === 302 || res.redirected) return location.reload();
-    state.slips = (await res.json()).slips;
+    const data = await res.json();
+    state.slips = data.slips;
+    if (data.products) state.products = data.products;
     render();
   } catch {
     /* offline for a moment: keep showing what we have */
@@ -129,12 +132,15 @@ function visibleSlips() {
     if (state.filter === "active" ? st === "discarded" : st !== state.filter) return false;
     if (state.group !== "all" && !slipProducts(s).some((p) => p.group === state.group)) return false;
     if (q && !`${slipTitle(s)} ${s.initials}`.toLowerCase().includes(q)) return false;
+    if (state.withinHours && st !== "discarded" && new Date(s.pull_at) - Date.now() > state.withinHours * 3600e3) return false;
     return true;
   });
   if (state.filter === "discarded") list.sort((a, b) => new Date(b.discarded_at) - new Date(a.discarded_at));
   else list.sort((a, b) => new Date(a.pull_at) - new Date(b.pull_at));
   return list;
 }
+
+const countBadge = (n) => `<span class="n">${n}</span>`;
 
 function render() {
   const counts = { expired: 0, soon: 0, fresh: 0, discarded: 0 };
@@ -158,11 +164,19 @@ function render() {
   const list = visibleSlips();
   $("#board").innerHTML = list.length
     ? groupedBoardHtml(list)
-    : `<p class="empty">${state.filter === "active" ? "No slips yet. Tap “+ New Slip” to add one." : "Nothing here."}</p>`;
+    : `<p class="empty">${state.withinHours ? "Nothing expiring in that time. Try a longer “Expiring within” time."
+        : state.filter === "active" ? "No slips yet. Tap “+ New Slip” to add one." : "Nothing here."}</p>`;
 
   const n = state.selected.size;
-  $("#btn-print").textContent = n ? `Print (${n})` : "Print";
-  ["#btn-print", "#btn-to-tray", "#btn-replace-save", "#btn-replace", "#btn-discard", "#btn-clear"].forEach((s) => ($(s).disabled = !n));
+  $("#btn-print").innerHTML = n ? `Print${countBadge(n)}` : "Print";
+  ["#btn-print", "#btn-to-tray", "#btn-replace-save", "#btn-replace", "#btn-discard"].forEach((s) => ($(s).disabled = !n));
+  const shown = list.filter((s) => !s.discarded_at);
+  // One button: "Select all" when nothing is selected, "Unselect all" otherwise.
+  $("#btn-select-all").innerHTML = n ? "Unselect all" : shown.length ? `Select all${countBadge(shown.length)}` : "Select all";
+  $("#btn-select-all").disabled = !n && !shown.length;
+  const out = trayTargets().length;
+  $("#btn-from-tray").innerHTML = out ? `Remove from tray${countBadge(out)}` : "Remove from tray";
+  $("#btn-from-tray").disabled = !out;
   renderTrayButton();
 }
 
@@ -232,6 +246,7 @@ function cardHtml(s, stack = null) {
       <h3>${esc(slipTitle(s))}</h3>
       <div class="pull"><span>Pull</span> ${fmtShort(pull)}</div>
       <div class="meta">In ${fmtShort(new Date(s.time_in))} · ${esc(s.initials)} · ${esc(s.shelf_life)}</div>
+      ${new Date(s.time_in) > Date.now() && st !== "discarded" ? `<span class="starts">Starts ${fmtShort(new Date(s.time_in))}</span>` : ""}
       <div class="card-foot">
         ${st === "discarded" ? "" : s.printed_at
           ? `<button type="button" class="tray-btn" data-tray="add">+ Add to tray</button>`
@@ -405,7 +420,7 @@ function trayFill(n) {
 
 function renderTrayButton() {
   const n = trayItems().length;
-  $("#btn-tray").textContent = n ? `Print tray (${n})` : "Print tray";
+  $("#btn-tray").innerHTML = n ? `Print tray${countBadge(n)}` : "Print tray";
   $("#btn-tray").title = n ? trayFill(n) : "Saved slips wait here until you print";
   $("#btn-tray").classList.toggle("has-items", n > 0);
 }
@@ -452,33 +467,95 @@ async function discard(slips) {
   return true;
 }
 
-async function replace(slips, { print = true } = {}) {
+// Replace = discard the old slips (they go to History) and make fresh ones.
+// A small window asks for initials and the new time in (now, tomorrow, or any time).
+let pendingReplace = null;
+
+function replace(slips, { print = true } = {}) {
   const live = slips.filter((s) => !s.discarded_at);
   if (!live.length) return;
-  const timeBased = live.every((s) => slipProducts(s).every((p) => p.basis === "time_in"));
-  if (!timeBased) {
-    // Frozen / seasoned chicken need a new defrost or kill date, so ask for it.
-    if (!(await discard(live))) return;
-    openNew([...new Set(live.flatMap((s) => s.product_ids))]);
-    return;
+  pendingReplace = { live, print };
+  const n = live.length;
+  $("#replace-title").textContent = `Replace ${n} slip${n > 1 ? "s" : ""}`;
+  $("#btn-replace-go").textContent = print ? "Replace & print" : "Replace & save";
+  $("#replace-initials").value = lastInitials();
+  document.querySelector("input[name=replace-when][value=now]").checked = true;
+  const tomorrow = new Date(Date.now() + 864e5);
+  tomorrow.setHours(7, 0, 0, 0); // a sensible default when picking a time
+  $("#replace-time").value = toLocalInput(tomorrow);
+  $("#replace-error").textContent = "";
+  updateReplace();
+  $("#dlg-replace").showModal();
+  if (!$("#replace-initials").value) $("#replace-initials").focus();
+}
+
+function replaceTimeIn() {
+  const when = document.querySelector("input[name=replace-when]:checked").value;
+  const now = new Date();
+  now.setSeconds(0, 0);
+  if (when === "tomorrow") return new Date(now.getTime() + 864e5);
+  if (when === "pick") return new Date($("#replace-time").value);
+  return now;
+}
+
+function updateReplace() {
+  if (!pendingReplace) return;
+  const t = replaceTimeIn();
+  $("#replace-time").disabled = document.querySelector("input[name=replace-when]:checked").value !== "pick";
+  $("#replace-preview").innerHTML = pendingReplace.live.map((s) => {
+    const p = slipProducts(s)[0];
+    const pull = p && !isNaN(t) ? computePull(p, t) : null;
+    return `<li><b>${esc(slipTitle(s))}</b><span>${
+      p && p.basis !== "time_in" ? "Enter the defrost date next" : pull ? "Pull " + fmtShort(pull) : "Pick a valid time"}</span></li>`;
+  }).join("");
+}
+
+async function confirmReplace() {
+  const { live, print } = pendingReplace;
+  const who = $("#replace-initials").value.trim().toUpperCase();
+  const timeIn = replaceTimeIn();
+  if (!who) return ($("#replace-error").textContent = "Enter your initials.");
+  if (isNaN(timeIn)) return ($("#replace-error").textContent = "Pick a valid date and time.");
+  rememberInitials(who);
+  const btn = $("#btn-replace-go");
+  btn.disabled = true;
+  try {
+    const timeBased = live.every((s) => slipProducts(s).every((p) => p.basis === "time_in"));
+    if (!timeBased) {
+      // Frozen items need a new defrost date, so finish in the New Slip window.
+      await post("/api/slips/discard/", { ids: live.map((s) => s.id), initials: who });
+      $("#dlg-replace").close();
+      state.selected.clear();
+      await refreshSlips();
+      openNew([...new Set(live.flatMap((s) => s.product_ids))], timeIn);
+      return;
+    }
+    const created = [];
+    for (const s of live) {
+      const res = await post("/api/slips/create/", {
+        product_ids: s.product_ids, initials: who, combine: true, quantity: 1, time_in: toLocalInput(timeIn),
+      });
+      created.push(...res.slips);
+    }
+    await post("/api/slips/discard/", { ids: live.map((s) => s.id), initials: who });
+    $("#dlg-replace").close();
+    state.selected.clear();
+    await refreshSlips();
+    if (print) await printSlips(created); // otherwise the new slips wait in the print tray
+  } catch (e) {
+    $("#replace-error").textContent = e.message;
+  } finally {
+    btn.disabled = false;
   }
-  const who = askInitials(`replacing ${live.length} slip${live.length > 1 ? "s" : ""}`);
-  if (!who) return;
-  const created = [];
-  for (const s of live) {
-    const res = await post("/api/slips/create/", { product_ids: s.product_ids, initials: who, combine: true, quantity: 1 });
-    created.push(...res.slips);
-  }
-  await post("/api/slips/discard/", { ids: live.map((s) => s.id), initials: who });
-  state.selected.clear();
-  await refreshSlips();
-  if (print) await printSlips(created); // otherwise the new slips wait in the print tray
 }
 
 async function restore(slip) {
   await post("/api/slips/restore/", { ids: [slip.id] });
   await refreshSlips();
 }
+
+// "Remove from tray" acts on the selected slips that are in the tray (like "Add to tray").
+const trayTargets = () => selectedSlips().filter((s) => !s.printed_at && !s.discarded_at);
 
 async function setInTray(ids, inTray) {
   await post("/api/slips/printed/", { ids, printed: !inTray });
@@ -500,7 +577,7 @@ function openView(id) {
       : `<button class="btn danger" type="button" data-act="discard">Discard</button>
          <button class="btn" type="button" data-act="tray">${s.printed_at ? "+ Add to tray" : "&#10003; In tray (remove)"}</button>
          <button class="btn" type="button" data-act="replace-save">Replace &amp; save</button>
-         <button class="btn" type="button" data-act="replace">Replace &amp; reprint</button>`}
+         <button class="btn" type="button" data-act="replace">Replace &amp; print</button>`}
     <button class="btn primary" type="button" data-act="print">Print</button>`;
   $("#view-actions").onclick = async (e) => {
     const act = e.target.dataset.act;
@@ -508,8 +585,8 @@ function openView(id) {
     try {
       if (act === "print") await printSlips([s]);
       if (act === "discard" && (await discard([s]))) $("#dlg-view").close();
-      if (act === "replace") { $("#dlg-view").close(); await replace([s]); }
-      if (act === "replace-save") { $("#dlg-view").close(); await replace([s], { print: false }); }
+      if (act === "replace") { $("#dlg-view").close(); replace([s]); }
+      if (act === "replace-save") { $("#dlg-view").close(); replace([s], { print: false }); }
       if (act === "tray") { await setInTray([s.id], !!s.printed_at); $("#dlg-view").close(); }
       if (act === "restore") { await restore(s); $("#dlg-view").close(); }
     } catch (err) { alert(err.message); }
@@ -519,12 +596,12 @@ function openView(id) {
 }
 
 /* ---------- new slip ---------- */
-function openNew(preselect = []) {
+function openNew(preselect = [], timeIn = new Date()) {
   state.newSel = new Set(preselect.filter((id) => productById(id)?.active));
   $("#new-title").textContent = preselect.length ? "Replace slip" : "New Slip";
   $("#new-initials").value = lastInitials();
-  $("#new-time-in").value = toLocalInput(new Date());
-  $("#new-defrost").value = toDateInput(new Date());
+  $("#new-time-in").value = toLocalInput(timeIn);
+  $("#new-defrost").value = toDateInput(timeIn);
   $("#new-kill").value = "";
   $("#new-qty").value = 1;
   $("#new-combine").checked = true;
@@ -664,13 +741,17 @@ async function saveProductRow(tr) {
   const btn = tr.querySelector("[data-save]");
   $("#products-error").textContent = "";
   try {
-    const { product } = await post(id ? `/api/products/${id}/` : "/api/products/create/", body);
+    const { product, updated_slips: moved = 0 } = await post(id ? `/api/products/${id}/` : "/api/products/create/", body);
     const i = state.products.findIndex((p) => p.id === product.id);
     if (i >= 0) state.products[i] = product; else state.products.push(product);
     tr.dataset.id = product.id;
     btn.textContent = "Saved ✓";
     setTimeout(() => (btn.textContent = "Save"), 1500);
-    render();
+    await refreshSlips(); // board shows new names and pull times straight away
+    if (moved) {
+      $("#products-error").textContent = "";
+      alert(`${productLabel(product)}: ${moved} slip${moved > 1 ? "s" : ""} on the board now ha${moved > 1 ? "ve" : "s"} the new pull time.\n\nThey were put in the print tray. Reprint them and swap the old paper slips.`);
+    }
   } catch (e) {
     $("#products-error").textContent = e.message;
   }
@@ -695,6 +776,20 @@ $("#status-filter").addEventListener("click", (e) => {
   if (b) setFilter(b.dataset.filter);
 });
 $("#group-filter").addEventListener("change", (e) => { state.group = e.target.value; render(); });
+
+function readWithin() {
+  const v = $("#within-filter").value;
+  $("#within-custom").hidden = v !== "custom";
+  if (v === "custom") {
+    const n = Number($("#within-num").value);
+    state.withinHours = n > 0 ? n * Number($("#within-unit").value) : null;
+  } else {
+    state.withinHours = v ? Number(v) : null;
+  }
+  $("#within-filter").classList.toggle("on", !!state.withinHours);
+  render();
+}
+["#within-filter", "#within-num", "#within-unit"].forEach((id) => $(id).addEventListener("input", readWithin));
 $("#search").addEventListener("input", (e) => { state.search = e.target.value; render(); });
 
 $("#board").addEventListener("click", (e) => {
@@ -734,7 +829,20 @@ $("#btn-select-expired").onclick = () => {
   if (state.filter !== "active" && state.filter !== "expired") state.filter = "expired";
   render();
 };
-$("#btn-clear").onclick = () => { state.selected.clear(); render(); };
+$("#btn-select-all").onclick = () => {
+  if (state.selected.size) state.selected.clear();
+  else visibleSlips().filter((s) => !s.discarded_at).forEach((s) => state.selected.add(s.id));
+  render();
+};
+$("#btn-from-tray").onclick = async () => {
+  const ids = trayTargets().map((s) => s.id);
+  if (!ids.length) return;
+  try {
+    await setInTray(ids, false);
+    state.selected.clear();
+    render();
+  } catch (e) { alert(e.message); }
+};
 $("#btn-print").onclick = () => printSlips(selectedSlips()).catch((e) => alert(e.message));
 $("#btn-to-tray").onclick = async () => {
   const live = selectedSlips().filter((s) => !s.discarded_at);
@@ -746,6 +854,9 @@ $("#btn-to-tray").onclick = async () => {
   } catch (e) { alert(e.message); }
 };
 $("#btn-tray").onclick = openTray;
+$("#btn-replace-go").onclick = confirmReplace;
+$("#dlg-replace").addEventListener("input", updateReplace);
+$("#dlg-replace").addEventListener("close", () => (pendingReplace = null));
 $("#btn-tray-print").onclick = async () => {
   $("#dlg-tray").close();
   try { await printSlips(trayItems()); } catch (e) { alert(e.message); }
@@ -769,8 +880,8 @@ $("#btn-print-settings-save").onclick = () => {
   render();
 };
 $("#btn-discard").onclick = () => discard(selectedSlips()).catch((e) => alert(e.message));
-$("#btn-replace").onclick = () => replace(selectedSlips()).catch((e) => alert(e.message));
-$("#btn-replace-save").onclick = () => replace(selectedSlips(), { print: false }).catch((e) => alert(e.message));
+$("#btn-replace").onclick = () => replace(selectedSlips());
+$("#btn-replace-save").onclick = () => replace(selectedSlips(), { print: false });
 
 $("#picker").addEventListener("click", (e) => {
   const b = e.target.closest("[data-pid]");

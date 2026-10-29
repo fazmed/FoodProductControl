@@ -23,8 +23,9 @@ class PullTimeTests(TestCase):
         self.assertEqual(self.get("Buttermilk Batter").pull_at(local(2026, 10, 6, 13, 45)), local(2026, 10, 9, 13, 45))
         # Strawberry Syrup is 12 hrs: 11 AM -> 11 PM same day
         self.assertEqual(self.get("Strawberry Syrup").pull_at(local(2026, 10, 7, 11)), local(2026, 10, 7, 23))
-        # Chopped Chicken 36 hrs
-        self.assertEqual(self.get("Chopped Chicken").pull_at(local(2026, 10, 7, 11)), local(2026, 10, 8, 23))
+        # Pulled Chicken (cooler) 36 hrs; Chopped Chicken is the same product, so it's hidden
+        self.assertEqual(self.get("Pulled Chicken", "Cooler").pull_at(local(2026, 10, 7, 11)), local(2026, 10, 8, 23))
+        self.assertFalse(self.get("Chopped Chicken").active)
         # Pulled Chicken in the freezer, 4 weeks
         self.assertEqual(self.get("Pulled Chicken", "Freezer").pull_at(local(2026, 10, 1, 9)), local(2026, 10, 29, 9))
 
@@ -129,6 +130,15 @@ class ApiTests(TestCase):
         res = self.post("/api/slips/create/", {"product_ids": self.ids("Fillet"), "initials": "JS"})
         self.assertEqual(res.status_code, 400)
 
+    def test_create_with_future_time_in(self):
+        # Slips can be made ahead (e.g. tonight for tomorrow morning); pull counts from that time.
+        res = self.post("/api/slips/create/", {
+            "product_ids": self.ids("Lettuce"), "initials": "KR", "time_in": "2030-01-02T07:00",
+        })
+        slip = res.json()["slips"][0]
+        self.assertTrue(slip["time_in"].startswith("2030-01-02T07:00"))
+        self.assertTrue(slip["pull_at"].startswith("2030-01-03T07:00"))
+
     def test_discard_and_restore(self):
         slip = self.post("/api/slips/create/", {"product_ids": self.ids("Lettuce"), "initials": "KR"}).json()["slips"][0]
         self.post("/api/slips/discard/", {"ids": [slip["id"]], "initials": "sk"})
@@ -153,20 +163,48 @@ class ApiTests(TestCase):
         self.post("/api/slips/printed/", {"ids": ids[:1], "printed": False})
         self.assertEqual(list(Slip.objects.filter(printed_at__isnull=True).values_list("id", flat=True)), ids[:1])
 
-    def test_product_edit_is_staff_only_and_keeps_old_pull_times(self):
+    def test_product_edit_updates_slips_on_board(self):
         lettuce = Product.objects.get(name="Lettuce")
-        slip = self.post("/api/slips/create/", {
-            "product_ids": [lettuce.id], "initials": "KR", "time_in": "2026-10-07T11:00",
-        }).json()["slips"][0]
+        made = {"product_ids": [lettuce.id], "initials": "KR", "time_in": "2026-10-07T11:00"}
+        on_board = self.post("/api/slips/create/", made).json()["slips"][0]
+        gone = self.post("/api/slips/create/", made).json()["slips"][0]
+        self.post("/api/slips/printed/", {"ids": [on_board["id"], gone["id"]]})
+        self.post("/api/slips/discard/", {"ids": [gone["id"]], "initials": "KR"})
 
-        res = self.post(f"/api/products/{lettuce.id}/", {"name": "Lettuce (shredded)", "duration_value": 2})
+        # Rename only: no pull times change.
+        res = self.post(f"/api/products/{lettuce.id}/", {"name": "Shredded Lettuce"})
+        self.assertEqual(res.json()["updated_slips"], 0)
+
+        # Shelf life 1 -> 2 days: the slip on the board moves and goes back in the tray.
+        res = self.post(f"/api/products/{lettuce.id}/", {"duration_value": 2})
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.json()["product"]["shelf_life"], "2 days")
-        self.assertTrue(Slip.objects.get(id=slip["id"]).pull_at == local(2026, 10, 8, 11))
+        self.assertEqual(res.json()["updated_slips"], 1)
+        s = Slip.objects.get(id=on_board["id"])
+        self.assertEqual(s.pull_at, local(2026, 10, 9, 11))
+        self.assertEqual(s.shelf_life_label, "2 days")
+        self.assertIsNone(s.printed_at)
+        # Discarded slips (history) are left as they were.
+        self.assertEqual(Slip.objects.get(id=gone["id"]).pull_at, local(2026, 10, 8, 11))
 
-        staff_user = User.objects.create_user("crew", password="pw")
-        self.client.force_login(staff_user)
-        res = self.post(f"/api/products/{lettuce.id}/", {"duration_value": 9})
+        # New slips use the new shelf life.
+        new = self.post("/api/slips/create/", made).json()["slips"][0]
+        self.assertTrue(new["pull_at"].startswith("2026-10-09T11:00"))
+
+        # Crew (non-admin) can't edit products.
+        self.client.force_login(User.objects.create_user("crew", password="pw"))
+        self.assertEqual(self.post(f"/api/products/{lettuce.id}/", {"duration_value": 9}).status_code, 400)
+
+    def test_slip_list_includes_products_for_other_screens(self):
+        lettuce = Product.objects.get(name="Lettuce")
+        self.post(f"/api/products/{lettuce.id}/", {"duration_value": 3})
+        products = self.client.get("/api/slips/").json()["products"]
+        self.assertEqual(next(p for p in products if p["id"] == lettuce.id)["shelf_life"], "3 days")
+
+    def test_hidden_product_cannot_go_on_new_slips(self):
+        pickles = Product.objects.get(name="Pickles")
+        self.post(f"/api/products/{pickles.id}/", {"active": False})
+        res = self.post("/api/slips/create/", {"product_ids": [pickles.id], "initials": "KR"})
         self.assertEqual(res.status_code, 400)
 
     def test_delete_product(self):
@@ -181,6 +219,9 @@ class ApiTests(TestCase):
         self.assertEqual(self.post(f"/api/products/{pickles.id}/delete/", {}).status_code, 200)
         self.assertFalse(Product.objects.filter(id=pickles.id).exists())
         self.assertTrue(Slip.objects.filter(id=slip["id"]).exists())
+        # A deleted product can't be put on a new slip.
+        res = self.post("/api/slips/create/", {"product_ids": [pickles.id], "initials": "KR"})
+        self.assertEqual(res.status_code, 400)
         # Crew (non-admin) can't delete.
         self.client.force_login(User.objects.create_user("crew2", password="pw"))
         lettuce = Product.objects.get(name="Lettuce")
@@ -224,4 +265,4 @@ class TimingsFileTests(TestCase):
         self.assertTrue(Product.objects.get(name="Ranch").active)
         self.assertTrue(Product.objects.get(name="Shredded Lettuce").active)
         self.assertFalse(Product.objects.get(name="Lettuce").active)  # hidden, not deleted
-        self.assertEqual(Product.objects.filter(active=True).count(), 47)
+        self.assertEqual(Product.objects.filter(active=True).count(), 46)

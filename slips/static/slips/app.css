@@ -59,7 +59,13 @@ button, input, select { font: inherit; color: inherit; }
 
 /* ---------- toolbar & filters ---------- */
 .toolbar, .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 20px 0; }
-.sel-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.sel-actions { display: flex; flex-wrap: wrap; gap: 5px; margin-left: auto; }
+/* Compact toolbar so all actions fit on one row on a laptop/tablet screen */
+.toolbar { gap: 8px; }
+.toolbar .btn { font-size: .87rem; padding: 7px 10px; min-height: 40px; border-radius: 9px; }
+.toolbar .btn.big { font-size: 1rem; padding: 8px 16px; }
+.btn .n { display: inline-block; min-width: 1.5em; margin-left: 4px; padding: 0 5px; border-radius: 999px; background: var(--ink); color: #fff; font-size: .75rem; line-height: 1.5; text-align: center; }
+.btn.has-items .n, .btn.primary .n { background: #fff; color: var(--ink); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
   border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 6px 12px;
@@ -272,7 +278,11 @@ table.products { border-collapse: collapse; width: 100%; font-size: .9rem; }
   grid-template-columns: repeat(2, 4in); grid-template-rows: repeat(5, 2in); column-gap: .1875in;
 }
 .layout-labels10 .cslip { border: 0; padding: .14in .2in; }
-.cell { overflow: hidden; }
+.cell { overflow: hidden; position: relative; }
+/* Cut lines: a solid black square around every slip. Neighbouring outlines overlap,
+   so shared edges print as one line. Label sheets are pre-cut, so they get none. */
+#print-area .paper, #print-area .cslip { border: 0; }
+.layout-full3 .cell, .layout-compact8 .cell { outline: 2px solid #000; outline-offset: -1px; }
 
 @media print {
   body { background: #fff; }
@@ -319,3 +329,24 @@ table.products { border-collapse: collapse; width: 100%; font-size: .9rem; }
 .onboard { align-self: flex-start; margin-top: 4px; font-size: .7rem; font-weight: 800; color: #7a4a00; background: var(--amber-bg); border: 1px solid #f0d18a; border-radius: 999px; padding: 1px 7px; }
 .new-preview .warn { background: var(--amber-bg); border: 1px solid #f0d18a; color: #5e3d00; border-radius: 8px; padding: 8px 10px; font-size: .88rem; margin: 0 0 8px; }
 .products td.row-actions { display: flex; gap: 4px; }
+
+/* "Pull within" filter */
+#within-filter.on { border-color: var(--accent); background: #fff1e8; font-weight: 700; }
+.within-custom { display: inline-flex; gap: 6px; align-items: center; }
+.filters .within-custom input { flex: none; width: 80px; min-width: 0; }
+
+/* replace window */
+.replace-body { display: flex; flex-direction: column; gap: 12px; }
+.replace-body .field { display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
+.replace-body .field input { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; min-height: 44px; text-transform: uppercase; width: 140px; }
+.when { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px 12px; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.when legend { font-weight: 600; padding: 0 4px; }
+.when label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 32px; }
+.when input[type=radio] { width: 20px; height: 20px; accent-color: var(--accent); }
+.when input[type=datetime-local] { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+.when input:disabled { opacity: .45; }
+.replace-preview { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow: auto; }
+.replace-preview li { background: var(--bg); border-radius: 8px; padding: 8px 10px; display: flex; justify-content: space-between; gap: 10px; font-size: .9rem; }
+.replace-preview li span { font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* slip made ahead of time (time in is in the future) */
+.starts { align-self: flex-start; font-size: .72rem; font-weight: 800; color: #1d4f91; background: #e6f0fb; border: 1px solid #b9d2f0; border-radius: 999px; padding: 1px 8px; }

@@ -94,7 +94,11 @@ def board(request):
 @api
 @require_GET
 def slip_list(request):
-    return JsonResponse({"slips": [slip_json(s) for s in slips_queryset()]})
+    # Products are included so other open screens pick up name/shelf-life changes too.
+    return JsonResponse({
+        "slips": [slip_json(s) for s in slips_queryset()],
+        "products": [product_json(p) for p in Product.objects.all()],
+    })
 
 
 def parse_date(value, label):
@@ -237,9 +241,21 @@ def product_create(request):
 @api
 @require_POST
 def product_update(request, pk):
+    """Save a product. If its shelf-life rule changed, slips on the board are updated
+    right away and put in the print tray, since their printed pull time is now wrong."""
     staff_only(request)
-    product = apply_product_fields(get_object_or_404(Product, pk=pk), request.json)
-    return JsonResponse({"product": product_json(product)})
+    product = get_object_or_404(Product, pk=pk)
+    old_rule = product.rule_key
+    with transaction.atomic():
+        product = apply_product_fields(product, request.json)
+        updated = 0
+        if product.rule_key != old_rule:
+            for slip in product.slips.filter(discarded_at__isnull=True).prefetch_related("products"):
+                if slip.recompute_pull():
+                    slip.printed_at = None
+                    slip.save(update_fields=["pull_at", "shelf_life_label", "printed_at"])
+                    updated += 1
+    return JsonResponse({"product": product_json(product), "updated_slips": updated})
 
 
 @api

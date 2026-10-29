@@ -115,3 +115,23 @@ class Slip(models.Model):
     def __str__(self):
         names = ", ".join(p.name for p in self.products.all())
         return f"{names} - pull {timezone.localtime(self.pull_at):%d/%m %I:%M %p}"
+
+    def recompute_pull(self):
+        """Recalculate the pull time from the products' current shelf life.
+
+        Uses the earliest pull among the slip's products (safest for combined
+        slips). Returns True if the pull time changed.
+        """
+        options = []
+        for p in self.products.all():
+            try:
+                options.append((p.pull_at(self.time_in, self.defrost_start, self.kill_date), p))
+            except ValueError:
+                continue  # e.g. now counted from a defrost date this slip doesn't have
+        if not options:
+            return False
+        pull, product = min(options, key=lambda o: o[0])
+        changed = pull != self.pull_at
+        self.pull_at = pull
+        self.shelf_life_label = product.shelf_life_label
+        return changed

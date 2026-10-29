@@ -21,9 +21,9 @@ Open http://localhost:8000 (or the computer's IP from a tablet on the same Wi-Fi
   - Frozen items ask for the **defrost start date** and seasoned chicken asks for the **kill date**.
   - **How many slips** prints one slip per pan (e.g. 6 pans of Spicy Dark).
   - Products with the same shelf life (e.g. HBBQ, H Garlic, S'Hot) can share one slip.
-- **Click a slip** to see it exactly as it prints, then Print / Discard / Replace & reprint.
+- **Click a slip** to see it exactly as it prints, then Print / Discard / Replace & print.
 - **Tick several slips** (or **Select expired**) to print, discard or replace them together.
-- **Replace & reprint**: discards the old slip, makes a fresh one starting now, and prints it.
+- **Replace & print**: discards the old slip, makes a fresh one starting now, and prints it.
 - **History (7 days)**: discarded slips, with who discarded them. They can be put back on the board.
 
 ## Printing
@@ -43,7 +43,8 @@ Open http://localhost:8000 (or the computer's IP from a tablet on the same Wi-Fi
 - **Add to tray** queues existing slips for a reprint.
 
 **Replacing a slip**
-- **Replace & reprint** makes a fresh slip and prints it straight away.
+- **Replace & print** makes a fresh slip and prints it straight away.
+- Both open a small window for your initials and the **new time in**: Now, Tomorrow (same time), or any date and time (e.g. make tomorrow morning's slips tonight). Slips with a future time in show a blue "Starts …" tag on the board. The old slips go to History.
 - **Replace & save** makes a fresh slip and puts it in the tray instead.
 
 In the browser print dialog, set margins to "Default" (or "None" for labels), scale to 100%, and turn off "Headers and footers".
